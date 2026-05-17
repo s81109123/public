@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>低調番茄鐘</title>
+    <!-- PWA 支援 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3239/3239334.png">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --text: #f1f5f9;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .container {
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            padding: 2rem;
+            background: var(--card);
+            border-radius: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        #timer {
+            font-size: 5rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            margin: 1rem 0;
+            color: var(--accent);
+            text-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+        }
+        .label {
+            font-size: 1.2rem;
+            opacity: 0.7;
+            margin-bottom: 2rem;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 1rem;
+            border-radius: 1rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        button.primary {
+            background: var(--accent);
+            color: var(--bg);
+            grid-column: span 2;
+            font-size: 1.2rem;
+            padding: 1.2rem;
+        }
+        .settings {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: space-around;
+            font-size: 0.9rem;
+            opacity: 0.6;
+        }
+        input {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            width: 50px;
+            text-align: center;
+            border-radius: 5px;
+        }
+        #status {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #10b981;
+            height: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="status"></div>
+        <div id="timer">20:00</div>
+        <div class="label" id="cycleInfo">第 1 / 1 輪</div>
+        
+        <div class="settings">
+            <div>時間: <input type="number" id="minInput" value="20" min="1"> 分</div>
+            <div>輪數: <input type="number" id="totalCycles" value="3" min="1"> 輪</div>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="primary">開始計時</button>
+            <button id="resetBtn">重設</button>
+            <button id="notifyBtn">啟動通知提醒</button>
+        </div>
+    </div>
+
+    <!-- 更低調、清脆的環境音效 (水滴聲) -->
+    <audio id="beep" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
+
+    <script>
+        let timeLeft = 20 * 60;
+        let timerId = null;
+        let currentCycle = 1;
+        let isRunning = false;
+
+        const timerDisplay = document.getElementById('timer');
+        const cycleDisplay = document.getElementById('cycleInfo');
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const statusDisplay = document.getElementById('status');
+        const beep = document.getElementById('beep');
+
+        // 要求通知權限
+        document.getElementById('notifyBtn').addEventListener('click', () => {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    alert('通知權限已開啟！時間到時將會提醒。');
+                }
+            });
+        });
+
+        function updateDisplay() {
+            const m = Math.floor(timeLeft / 60);
+            const s = timeLeft % 60;
+            timerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            cycleDisplay.textContent = `第 ${currentCycle} / ${document.getElementById('totalCycles').value} 輪`;
+        }
+
+        function playBeep() {
+            beep.play().catch(e => console.log("音效受限:", e));
+            
+            // 發送通知
+            if (Notification.permission === 'granted') {
+                new Notification('時間到！', {
+                    body: `第 ${currentCycle} 輪已結束，準備進入下一輪。`,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/3239/3239334.png'
+                });
+            }
+
+            // 視覺閃爍
+            document.body.style.backgroundColor = '#38bdf8';
+            setTimeout(() => document.body.style.backgroundColor = '#0f172a', 150);
+        }
+
+        function startTimer() {
+            if (isRunning) {
+                clearInterval(timerId);
+                startBtn.textContent = '繼續';
+                isRunning = false;
+                statusDisplay.textContent = '已暫停';
+            } else {
+                isRunning = true;
+                startBtn.textContent = '暫停';
+                statusDisplay.textContent = '計時中...';
+                
+                // 解鎖 iOS 音效
+                beep.play().then(() => { beep.pause(); beep.currentTime = 0; });
+
+                timerId = setInterval(() => {
+                    timeLeft--;
+                    if (timeLeft <= 0) {
+                        playBeep();
+                        const total = parseInt(document.getElementById('totalCycles').value);
+                        if (currentCycle < total) {
+                            currentCycle++;
+                            timeLeft = document.getElementById('minInput').value * 60;
+                            statusDisplay.textContent = '自動進入下一輪';
+                        } else {
+                            clearInterval(timerId);
+                            isRunning = false;
+                            startBtn.textContent = '完成！';
+                            statusDisplay.textContent = '已達成所有目標';
+                        }
+                    }
+                    updateDisplay();
+                }, 1000);
+            }
+        }
+
+        startBtn.addEventListener('click', startTimer);
+        resetBtn.addEventListener('click', () => {
+            clearInterval(timerId);
+            isRunning = false;
+            currentCycle = 1;
+            timeLeft = document.getElementById('minInput').value * 60;
+            startBtn.textContent = '開始計時';
+            statusDisplay.textContent = '';
+            updateDisplay();
+        });
+
+        document.getElementById('minInput').addEventListener('change', () => {
+            if (!isRunning) {
+                timeLeft = document.getElementById('minInput').value * 60;
+                updateDisplay();
+            }
+        });
+        
+        updateDisplay();
+    </script>
+</body>
+</html>
